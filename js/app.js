@@ -9,6 +9,7 @@ const GAME_MODE_KEY = "sophia_v3_game_mode";
 const AI_SETTINGS_KEY = "sophia_v3_ai_settings";
 const CUSTOM_CHARACTERS_KEY = "sophia_v3_custom_characters";
 const MUSIC_SETTINGS_KEY = "sophia_v3_music_settings";
+const LIBRARY_WORD_PAGE_SIZE = 50;
 
 const state = {
   activeSaveId: null,
@@ -24,7 +25,8 @@ const state = {
   advanceTimer: null,
   aiBusy: false,
   localMusicTracks: [],
-  musicPlaying: false
+  musicPlaying: false,
+  libraryWordPages: {}
 };
 
 const $ = id => document.getElementById(id);
@@ -1113,6 +1115,7 @@ function renderLibraryScreen() {
   renderLibraryWordList();
 }
 function toggleLibraryForSave(libraryId, checked) {
+  if (!checked) delete state.libraryWordPages[libraryId];
   updateActiveSave(save => {
     const selected = new Set(save.selectedLibraries || []);
     checked ? selected.add(libraryId) : selected.delete(libraryId);
@@ -1141,6 +1144,7 @@ function deleteLibrary(libraryId) {
   const target = libraries.find(library => library.id === libraryId);
   if (!target || target.readonly || !confirm(t("system.deleteLibraryConfirm", { name: target.name }))) return;
   saveLibraries(libraries.filter(library => library.id !== libraryId));
+  delete state.libraryWordPages[libraryId];
   removeLibraryFromAllSaves(libraryId);
   refreshWords();
   renderLibraryScreen();
@@ -1168,14 +1172,51 @@ function addWordToLibrary() {
   renderLibraryScreen();
 }
 function renderLibraryWordList() {
-  el.libraryWordList.innerHTML = loadLibraries().map(library => {
-    const wordsHtml = library.words.length ? library.words.map((word, index) => `
-      <article class="word-row">
-        <div><strong>${escapeHtml(word.word)}</strong><span>${escapeHtml(word.answer.join(" / "))} · ${escapeHtml(word.hint || t("ui.noHint"))}</span></div>
-        ${library.readonly ? "" : `<button class="danger-btn" type="button" data-library-id="${library.id}" data-word-index="${index}">${escapeHtml(t("ui.delete"))}</button>`}
-      </article>`).join("") : `<p class="help-text">${escapeHtml(t("ui.noWords"))}</p>`;
-    return `<section class="library-block"><h3>${escapeHtml(getLibraryDisplayName(library))}</h3><div class="word-list-inner">${wordsHtml}</div></section>`;
+  const save = getActiveSave();
+  if (!save) return;
+  const selected = new Set(save.selectedLibraries || []);
+  const libraries = loadLibraries().filter(library => selected.has(library.id));
+  if (!libraries.length) {
+    el.libraryWordList.innerHTML = `<p class="help-text">${escapeHtml(t("ui.noEnabledLibraryWords"))}</p>`;
+    return;
+  }
+  el.libraryWordList.innerHTML = libraries.map(library => {
+    const totalWords = library.words.length;
+    const totalPages = Math.max(1, Math.ceil(totalWords / LIBRARY_WORD_PAGE_SIZE));
+    const currentPage = clamp(Number(state.libraryWordPages[library.id] || 0), 0, totalPages - 1);
+    state.libraryWordPages[library.id] = currentPage;
+    const start = currentPage * LIBRARY_WORD_PAGE_SIZE;
+    const pageWords = library.words.slice(start, start + LIBRARY_WORD_PAGE_SIZE);
+    const wordsHtml = pageWords.length ? pageWords.map((word, offset) => {
+      const index = start + offset;
+      return `
+        <article class="word-row">
+          <div><strong>${escapeHtml(word.word)}</strong><span>${escapeHtml(word.answer.join(" / "))} · ${escapeHtml(word.hint || t("ui.noHint"))}</span></div>
+          ${library.readonly ? "" : `<button class="danger-btn" type="button" data-library-id="${library.id}" data-word-index="${index}">${escapeHtml(t("ui.delete"))}</button>`}
+        </article>`;
+    }).join("") : `<p class="help-text">${escapeHtml(t("ui.noWords"))}</p>`;
+    const pager = totalWords > LIBRARY_WORD_PAGE_SIZE ? `
+      <div class="library-pager">
+        <button class="secondary-btn" type="button" data-library-page="${library.id}" data-page-direction="-1" ${currentPage <= 0 ? "disabled" : ""}>‹</button>
+        <span>${escapeHtml(t("ui.libraryPageInfo", {
+          page: currentPage + 1,
+          total: totalPages,
+          start: totalWords ? start + 1 : 0,
+          end: Math.min(start + LIBRARY_WORD_PAGE_SIZE, totalWords),
+          count: totalWords
+        }))}</span>
+        <button class="secondary-btn" type="button" data-library-page="${library.id}" data-page-direction="1" ${currentPage >= totalPages - 1 ? "disabled" : ""}>›</button>
+      </div>` : "";
+    return `<section class="library-block"><h3>${escapeHtml(getLibraryDisplayName(library))}</h3>${pager}<div class="word-list-inner">${wordsHtml}</div>${pager}</section>`;
   }).join("");
+  el.libraryWordList.querySelectorAll("[data-library-page]").forEach(button => {
+    button.addEventListener("click", () => {
+      const libraryId = button.dataset.libraryPage;
+      const direction = Number(button.dataset.pageDirection);
+      state.libraryWordPages[libraryId] = Math.max(0, Number(state.libraryWordPages[libraryId] || 0) + direction);
+      renderLibraryWordList();
+    });
+  });
   el.libraryWordList.querySelectorAll("[data-word-index]").forEach(button => {
     button.addEventListener("click", () => deleteWordFromLibrary(button.dataset.libraryId, Number(button.dataset.wordIndex)));
   });
