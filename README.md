@@ -247,6 +247,7 @@ music/
 
 词库在普通模式和高级模式之间共享。
 内置默认词库包括：基础词库、大学英语四级、大学英语六级。
+系统还内置一个初始为空的“错题本”。答题时点击“加入错题本”即可把当前单词保存进去，重复单词不会重复加入。
 
 支持：
 
@@ -502,6 +503,7 @@ Each character has independent:
 
 Vocabulary-library selection remains shared inside the save.
 Built-in libraries include Basic Vocabulary, CET-4, and CET-6.
+The game also includes an initially empty Mistake Book. During a quiz, use “Add to Mistake Book” to save the current word; duplicates are ignored.
 
 ## Sophia's anger mechanic
 

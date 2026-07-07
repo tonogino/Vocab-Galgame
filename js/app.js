@@ -10,6 +10,7 @@ const AI_SETTINGS_KEY = "sophia_v3_ai_settings";
 const CUSTOM_CHARACTERS_KEY = "sophia_v3_custom_characters";
 const MUSIC_SETTINGS_KEY = "sophia_v3_music_settings";
 const LIBRARY_WORD_PAGE_SIZE = 50;
+const MISTAKE_BOOK_LIBRARY_ID = "mistake_book";
 
 const state = {
   activeSaveId: null,
@@ -41,7 +42,7 @@ const el = {
   settingsBtn: $("settingsBtn"),
   affectionValue: $("affectionValue"), affectionLevel: $("affectionLevel"), wordCounter: $("wordCounter"),
   correctRate: $("correctRate"), wordText: $("wordText"), wordHint: $("wordHint"), answerInput: $("answerInput"),
-  submitBtn: $("submitBtn"), showAnswerBtn: $("showAnswerBtn"), nextBtn: $("nextBtn"),
+  submitBtn: $("submitBtn"), showAnswerBtn: $("showAnswerBtn"), addToMistakeBookBtn: $("addToMistakeBookBtn"), nextBtn: $("nextBtn"),
   feedbackText: $("feedbackText"), characterImage: $("characterImage"), speakerName: $("speakerName"),
   dialogueText: $("dialogueText"), closeLibraryBtn: $("closeLibraryBtn"), librarySelectList: $("librarySelectList"),
   aiChatPanel: $("aiChatPanel"), aiChatTitle: $("aiChatTitle"), aiChatLog: $("aiChatLog"), aiChatInput: $("aiChatInput"),
@@ -343,14 +344,14 @@ function ensureVocabLibraries() {
   const existing = safeParse(localStorage.getItem(VOCAB_LIBRARIES_KEY), []);
   if (!Array.isArray(existing) || !existing.length) {
     localStorage.setItem(VOCAB_LIBRARIES_KEY, JSON.stringify(DEFAULT_VOCAB_LIBRARIES));
-    localStorage.setItem(DATA_VERSION_KEY, "4");
+    localStorage.setItem(DATA_VERSION_KEY, "5");
     return;
   }
-  if (localStorage.getItem(DATA_VERSION_KEY) !== "4") {
+  if (localStorage.getItem(DATA_VERSION_KEY) !== "5") {
     const defaultIds = new Set(DEFAULT_VOCAB_LIBRARIES.map(library => library.id));
     const customLibraries = existing.filter(library => !defaultIds.has(library.id));
     localStorage.setItem(VOCAB_LIBRARIES_KEY, JSON.stringify([...DEFAULT_VOCAB_LIBRARIES, ...customLibraries]));
-    localStorage.setItem(DATA_VERSION_KEY, "4");
+    localStorage.setItem(DATA_VERSION_KEY, "5");
   }
 }
 function loadLibraries() {
@@ -547,7 +548,9 @@ function getCharacterDescription(character) {
   return key ? t(key) : character.description || character.aiProfile?.personality || "";
 }
 function getLibraryDisplayName(library) {
-  return library.id === "default_basic" ? t("ui.defaultBasicLibrary") : library.name;
+  if (library.id === "default_basic") return t("ui.defaultBasicLibrary");
+  if (library.id === MISTAKE_BOOK_LIBRARY_ID) return t("ui.mistakeBookLibrary");
+  return library.name;
 }
 function getEventTitle(event) {
   const key = {
@@ -628,6 +631,7 @@ function setQuestionLocked(locked) {
   el.answerInput.disabled = wordUnavailable || state.advancing;
   el.submitBtn.disabled = wordUnavailable || state.advancing;
   el.showAnswerBtn.disabled = wordUnavailable || state.advancing || angerLocked;
+  el.addToMistakeBookBtn.disabled = wordUnavailable || state.advancing;
   el.nextBtn.disabled = state.advancing || state.words.length === 0;
   el.showAnswerBtn.textContent = state.hintVisible ? t("ui.hideHint") : t("ui.showHint");
   el.studyCard?.classList?.toggle("question-locked", locked);
@@ -780,6 +784,33 @@ function toggleHint() {
     el.feedbackText.textContent = state.hintVisible ? t("system.hintShownFree") : t("system.hintHidden");
   }
   renderGame();
+}
+function addCurrentWordToMistakeBook() {
+  const word = getCurrentWord();
+  if (!word || word.unavailable) return;
+  const libraries = loadLibraries();
+  let mistakeBook = libraries.find(library => library.id === MISTAKE_BOOK_LIBRARY_ID);
+  if (!mistakeBook) {
+    mistakeBook = {
+      id: MISTAKE_BOOK_LIBRARY_ID,
+      name: t("ui.mistakeBookLibrary"),
+      readonly: true,
+      words: []
+    };
+    libraries.push(mistakeBook);
+  }
+  const exists = mistakeBook.words.some(item => normalizeAnswer(item.word) === normalizeAnswer(word.word));
+  if (exists) {
+    el.feedbackText.textContent = t("system.mistakeBookDuplicate");
+    return;
+  }
+  mistakeBook.words.push({
+    word: word.word,
+    answer: Array.isArray(word.answer) ? [...word.answer] : [String(word.answer || "")],
+    hint: word.hint || t("system.customWordHint")
+  });
+  saveLibraries(libraries);
+  el.feedbackText.textContent = t("system.mistakeBookAdded", { word: word.word });
 }
 function nextWord() {
   if (state.advanceTimer) clearTimeout(state.advanceTimer);
@@ -1601,6 +1632,7 @@ function bindEvents() {
   });
   el.submitBtn.addEventListener("click", checkAnswer);
   el.showAnswerBtn.addEventListener("click", toggleHint);
+  el.addToMistakeBookBtn.addEventListener("click", addCurrentWordToMistakeBook);
   el.nextBtn.addEventListener("click", nextWord);
   el.answerInput.addEventListener("keydown", event => { if (event.key === "Enter") checkAnswer(); });
   el.characterImage.addEventListener("click", () => {

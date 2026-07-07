@@ -76197,5 +76197,11 @@ const DEFAULT_VOCAB_LIBRARIES = [
         "hint": "n. 条约， 协议， 协定"
       }
     ]
+  },
+  {
+    "id": "mistake_book",
+    "name": "错题本",
+    "readonly": true,
+    "words": []
   }
 ];
