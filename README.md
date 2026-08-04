@@ -77,6 +77,7 @@ Node.js 用于：
 - 答错：好感度 `-2`
 - 显示提示：每题第一次显示扣除好感度 `-1`，隐藏提示不扣好感度，显示提示后仍可继续答题
 - 随机模式：答题界面点击“随机模式”会创建一个临时打乱词库，并从第一个随机词开始；再次点击会删除临时词库并恢复原来的词库顺序
+- 反转模式：点击“反转模式”后会显示释义，要求输入原单词；再次点击即可恢复普通的单词释义练习
 
 ## 高级 AI 模式
 
@@ -506,6 +507,7 @@ Vocabulary-library selection remains shared inside the save.
 Built-in libraries include Basic Vocabulary, CET-4, and CET-6.
 The game also includes an initially empty Mistake Book. During a quiz, use “Add to Mistake Book” to save the current word; duplicates are ignored.
 Random Mode creates a temporary shuffled copy of the currently enabled libraries and starts from the first shuffled word. Click it again to remove the temporary shuffled library and return to the original library order.
+Reverse Mode swaps the question direction: it shows the meaning and asks you to type the original word. Click it again to return to normal word-to-meaning practice.
 
 ## Sophia's anger mechanic
 

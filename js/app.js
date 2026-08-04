@@ -28,7 +28,8 @@ const state = {
   localMusicTracks: [],
   musicPlaying: false,
   libraryWordPages: {},
-  randomMode: { active: false, saveId: null, words: [] }
+  randomMode: { active: false, saveId: null, words: [] },
+  reverseMode: false
 };
 
 const $ = id => document.getElementById(id);
@@ -42,9 +43,9 @@ const el = {
   characterBtn: $("characterBtn"), eventBtn: $("eventBtn"), characterName: $("characterName"),
   settingsBtn: $("settingsBtn"),
   affectionValue: $("affectionValue"), affectionLevel: $("affectionLevel"), wordCounter: $("wordCounter"),
-  correctRate: $("correctRate"), wordText: $("wordText"), wordHint: $("wordHint"), answerInput: $("answerInput"),
+  correctRate: $("correctRate"), questionPrompt: $("questionPrompt"), wordText: $("wordText"), wordHint: $("wordHint"), answerInput: $("answerInput"),
   submitBtn: $("submitBtn"), showAnswerBtn: $("showAnswerBtn"), addToMistakeBookBtn: $("addToMistakeBookBtn"),
-  randomModeBtn: $("randomModeBtn"), nextBtn: $("nextBtn"),
+  randomModeBtn: $("randomModeBtn"), reverseModeBtn: $("reverseModeBtn"), nextBtn: $("nextBtn"),
   feedbackText: $("feedbackText"), characterImage: $("characterImage"), speakerName: $("speakerName"),
   dialogueText: $("dialogueText"), closeLibraryBtn: $("closeLibraryBtn"), librarySelectList: $("librarySelectList"),
   aiChatPanel: $("aiChatPanel"), aiChatTitle: $("aiChatTitle"), aiChatLog: $("aiChatLog"), aiChatInput: $("aiChatInput"),
@@ -461,6 +462,7 @@ function setGameMode(mode) {
   state.mode = mode;
   state.activeSaveId = null;
   clearRandomMode();
+  clearReverseMode();
   document.body.classList.remove("sophia-angry");
   localStorage.setItem(GAME_MODE_KEY, mode);
   const activeSaveId = localStorage.getItem(getActiveSaveKey());
@@ -501,12 +503,14 @@ function createNewSave() {
   saveSaveSlots(saves);
   state.activeSaveId = save.id;
   clearRandomMode();
+  clearReverseMode();
   localStorage.setItem(getActiveSaveKey(), save.id);
   enterGame();
 }
 function selectSave(saveId) {
   state.activeSaveId = saveId;
   clearRandomMode();
+  clearReverseMode();
   localStorage.setItem(getActiveSaveKey(), saveId);
   enterGame();
 }
@@ -653,9 +657,11 @@ function setQuestionLocked(locked) {
   el.showAnswerBtn.disabled = wordUnavailable || state.advancing || angerLocked;
   el.addToMistakeBookBtn.disabled = wordUnavailable || state.advancing;
   el.randomModeBtn.disabled = state.advancing;
+  el.reverseModeBtn.disabled = wordUnavailable || state.advancing;
   el.nextBtn.disabled = state.advancing || state.words.length === 0;
   el.showAnswerBtn.textContent = state.hintVisible ? t("ui.hideHint") : t("ui.showHint");
   el.randomModeBtn.textContent = state.randomMode.active ? t("ui.exitRandomMode") : t("ui.randomMode");
+  el.reverseModeBtn.textContent = state.reverseMode ? t("ui.exitReverseMode") : t("ui.reverseMode");
   el.studyCard?.classList?.toggle("question-locked", locked);
 }
 function resetQuestionState(feedback = t("system.newWord")) {
@@ -707,7 +713,10 @@ function renderGame() {
   el.affectionLevel.textContent = getAffectionLevel(currentSave.affection);
   el.wordCounter.textContent = t("ui.wordCounter", { current: index + 1, total: state.words.length });
   el.correctRate.textContent = t("ui.accuracy", { rate: getCorrectRate(currentSave) });
-  el.wordText.textContent = word.word;
+  const answerValues = Array.isArray(word.answer) ? word.answer : [word.answer];
+  el.questionPrompt.textContent = state.reverseMode ? t("ui.reversePrompt") : t("ui.prompt");
+  el.answerInput.placeholder = state.reverseMode ? t("ui.reverseAnswerPlaceholder") : t("ui.answerPlaceholder");
+  el.wordText.textContent = state.reverseMode ? answerValues.join(" / ") : word.word;
   const angerPenalty = isAdvancedMode() && (currentSave.angerPenaltyQuestions || 0) > 0;
   if (angerPenalty) {
     el.wordHint.textContent = `${t("system.angryHintHidden")} · ${t("ui.fromLibrary", { name: word.libraryName })}`;
@@ -749,7 +758,8 @@ function checkAnswer() {
     el.feedbackText.textContent = t("system.emptyInput");
     return;
   }
-  const correct = word.answer.map(normalizeAnswer).includes(answer);
+  const expectedAnswers = state.reverseMode ? [word.word] : word.answer;
+  const correct = expectedAnswers.map(normalizeAnswer).includes(answer);
   const character = getCharacter();
   const wasSophiaAngry = isAdvancedMode() && character.id === "sophia" && (getActiveSave()?.angryUntil || 0) > Date.now();
   const updatedSave = updateActiveSave(save => ({
@@ -778,7 +788,7 @@ function checkAnswer() {
     triggerSophiaAnger();
     return;
   }
-  el.feedbackText.textContent = t("system.wrong", { answer: word.answer.join(" / ") });
+  el.feedbackText.textContent = t("system.wrong", { answer: expectedAnswers.join(" / ") });
   setCharacterMood("sad");
   speak("wrong");
   renderGame();
@@ -837,6 +847,9 @@ function addCurrentWordToMistakeBook() {
 function clearRandomMode() {
   state.randomMode = { active: false, saveId: null, words: [] };
 }
+function clearReverseMode() {
+  state.reverseMode = false;
+}
 function toggleRandomMode() {
   const save = getActiveSave();
   if (!save || state.advancing) return;
@@ -862,6 +875,14 @@ function toggleRandomMode() {
   updateActiveSave(current => ({ ...current, currentIndex: 0, updatedAt: new Date().toISOString() }));
   refreshWords();
   resetQuestionState(t("system.randomModeOn", { count: state.randomMode.words.length }));
+  renderGame();
+  el.answerInput.focus();
+}
+function toggleReverseMode() {
+  const word = getCurrentWord();
+  if (!word || word.unavailable || state.advancing) return;
+  state.reverseMode = !state.reverseMode;
+  resetQuestionState(t(state.reverseMode ? "system.reverseModeOn" : "system.reverseModeOff"));
   renderGame();
   el.answerInput.focus();
 }
@@ -1680,6 +1701,7 @@ function bindEvents() {
   el.backToStartBtn.addEventListener("click", () => {
     if (state.advanceTimer) clearTimeout(state.advanceTimer);
     clearRandomMode();
+    clearReverseMode();
     document.body.classList.remove("sophia-angry");
     switchScreen("startScreen");
     renderStartScreen();
@@ -1688,6 +1710,7 @@ function bindEvents() {
   el.showAnswerBtn.addEventListener("click", toggleHint);
   el.addToMistakeBookBtn.addEventListener("click", addCurrentWordToMistakeBook);
   el.randomModeBtn.addEventListener("click", toggleRandomMode);
+  el.reverseModeBtn.addEventListener("click", toggleReverseMode);
   el.nextBtn.addEventListener("click", nextWord);
   el.answerInput.addEventListener("keydown", event => { if (event.key === "Enter") checkAnswer(); });
   el.characterImage.addEventListener("click", () => {
