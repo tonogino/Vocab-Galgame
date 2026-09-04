@@ -561,6 +561,9 @@ function getLibraryDisplayName(library) {
   if (library.id === MISTAKE_BOOK_LIBRARY_ID) return t("ui.mistakeBookLibrary");
   return library.name;
 }
+function canDeleteWordsFromLibrary(library) {
+  return !library.readonly || library.id === MISTAKE_BOOK_LIBRARY_ID;
+}
 function getEventTitle(event) {
   const key = {
     event_001: "ui.event001Title",
@@ -1297,7 +1300,7 @@ function renderLibraryWordList() {
       return `
         <article class="word-row">
           <div><strong>${escapeHtml(word.word)}</strong><span>${escapeHtml(word.answer.join(" / "))} · ${escapeHtml(word.hint || t("ui.noHint"))}</span></div>
-          ${library.readonly ? "" : `<button class="danger-btn" type="button" data-library-id="${library.id}" data-word-index="${index}">${escapeHtml(t("ui.delete"))}</button>`}
+          ${canDeleteWordsFromLibrary(library) ? `<button class="danger-btn" type="button" data-library-id="${library.id}" data-word-index="${index}">${escapeHtml(t("ui.delete"))}</button>` : ""}
         </article>`;
     }).join("") : `<p class="help-text">${escapeHtml(t("ui.noWords"))}</p>`;
     const pager = totalWords > LIBRARY_WORD_PAGE_SIZE ? `
@@ -1329,7 +1332,7 @@ function renderLibraryWordList() {
 function deleteWordFromLibrary(libraryId, wordIndex) {
   const libraries = loadLibraries();
   const library = libraries.find(item => item.id === libraryId);
-  if (!library || library.readonly || !library.words[wordIndex]) return;
+  if (!library || !canDeleteWordsFromLibrary(library) || !library.words[wordIndex]) return;
   if (!confirm(t("system.deleteWordConfirm", { word: library.words[wordIndex].word }))) return;
   library.words.splice(wordIndex, 1);
   saveLibraries(libraries);
